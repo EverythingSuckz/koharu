@@ -214,7 +214,7 @@ function ModelPickerList({
             type='button'
             data-testid={`llm-model-option-${index}`}
             onClick={() => onSelect(model.id)}
-            className={`flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition ${
+            className={`flex w-full cursor-pointer items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition ${
               model.id === selectedModel
                 ? 'bg-accent text-accent-foreground'
                 : 'hover:bg-accent/50'
@@ -380,7 +380,7 @@ function LlmStatusPopover() {
             <PopoverTrigger asChild>
               <button
                 data-testid='llm-model-select'
-                className="border-input [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50 flex h-7 w-full items-center justify-between gap-1.5 rounded-md border bg-transparent px-2 py-1 text-xs whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]"
+                className="border-input [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50 flex h-7 w-full cursor-pointer items-center justify-between gap-1.5 rounded-md border bg-transparent px-2 py-1 text-xs whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]"
               >
                 <span className='flex items-center gap-1.5 truncate'>
                   {llmSelectedModel && selectedModelInfo ? (
