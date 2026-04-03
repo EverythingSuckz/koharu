@@ -821,7 +821,7 @@ export default function SettingsPage() {
                       key={value}
                       onClick={() => setTheme(value)}
                       data-active={theme === value}
-                      className='border-border bg-card text-muted-foreground hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground flex flex-1 flex-col items-center gap-2 rounded-lg border p-3 transition'
+                      className='border-border bg-card text-muted-foreground hover:border-foreground/30 data-[active=true]:border-primary data-[active=true]:text-foreground flex flex-1 cursor-pointer flex-col items-center gap-2 rounded-lg border p-3 transition'
                     >
                       <Icon className='size-5' />
                       <span className='text-xs font-medium'>{t(labelKey)}</span>
