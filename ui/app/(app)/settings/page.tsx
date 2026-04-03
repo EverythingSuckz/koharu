@@ -45,6 +45,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { isTauri } from '@/lib/backend'
 import { api } from '@/lib/api'
@@ -124,16 +125,17 @@ function AdvancedModelConfig() {
 
   return (
     <section className='mb-8'>
-      <button
-        type='button'
+      <Button
+        variant='ghost'
+        size='sm'
         onClick={() => setOpen((v) => !v)}
-        className='text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-sm font-bold transition'
+        className='text-muted-foreground hover:text-foreground -ml-2 font-bold'
       >
         <ChevronDownIcon
           className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`}
         />
         {t('settings.advancedModelConfig')}
-      </button>
+      </Button>
       <p className='text-muted-foreground mt-1 mb-4 text-sm'>
         {t('settings.advancedModelConfigDescription')}
       </p>
@@ -191,13 +193,13 @@ function AdvancedModelConfig() {
                 {t('settings.providerSystemPrompt')}
               </label>
               {llmCustomSystemPrompt && (
-                <button
-                  type='button'
+                <Button
+                  variant='link'
+                  size='xs'
                   onClick={() => setLlmConfig({ llmCustomSystemPrompt: '' })}
-                  className='text-primary cursor-pointer text-xs hover:underline'
                 >
                   {t('settings.providerSystemPromptReset')}
-                </button>
+                </Button>
               )}
             </div>
             <textarea
@@ -460,27 +462,29 @@ function ProviderCard({
             placeholder={t('settings.providerApiKey')}
             className={`${inputClass} pr-9`}
           />
-          <button
-            type='button'
+          <Button
+            variant='ghost'
+            size='icon-xs'
             onClick={() => setKeyVisible((v) => !v)}
-            className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2 cursor-pointer transition'
+            className='text-muted-foreground hover:text-foreground absolute top-1/2 right-2.5 -translate-y-1/2'
+            aria-label={keyVisible ? 'Hide API key' : 'Show API key'}
           >
             {keyVisible ? (
               <EyeOffIcon className='size-4' />
             ) : (
               <EyeIcon className='size-4' />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 
       {!cloud && (
         <div className='space-y-2'>
-          <button
-            type='button'
+          <Button
+            variant='outline'
+            size='sm'
             onClick={handleTestConnection}
             disabled={pingState.loading || !provider.baseUrl?.trim()}
-            className='border-border bg-card text-foreground hover:bg-accent disabled:text-muted-foreground inline-flex cursor-pointer items-center gap-2 rounded-md border px-4 py-1.5 text-sm font-medium transition disabled:cursor-default disabled:opacity-50'
           >
             {pingState.loading ? (
               <>
@@ -490,7 +494,7 @@ function ProviderCard({
             ) : (
               t('settings.providerTestConnection')
             )}
-          </button>
+          </Button>
 
           {pingState.result && !pingState.loading && (
             <div
@@ -545,11 +549,12 @@ function ProviderCard({
               {t('settings.providerPinnedModels')}
             </label>
             {!cloud && (
-              <button
-                type='button'
+              <Button
+                variant='ghost'
+                size='xs'
                 onClick={fetchModels}
                 disabled={fetchingModels || !provider.baseUrl?.trim()}
-                className='text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1 text-xs transition disabled:cursor-default disabled:opacity-50'
+                className='text-muted-foreground hover:text-foreground'
               >
                 <RefreshCwIcon
                   className={`size-3 ${fetchingModels ? 'animate-spin' : ''}`}
@@ -557,7 +562,7 @@ function ProviderCard({
                 {fetchingModels
                   ? t('settings.providerFetchingModels')
                   : t('settings.providerFetchModels')}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -632,8 +637,9 @@ function ProviderCard({
       )}
 
       <div className='border-border border-t pt-3'>
-        <button
-          type='button'
+        <Button
+          variant='ghost'
+          size='xs'
           onClick={() =>
             setConfirmDialog({
               open: true,
@@ -642,11 +648,11 @@ function ProviderCard({
               onConfirm: () => removeProvider(provider.id),
             })
           }
-          className='text-muted-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs transition hover:text-red-500'
+          className='text-muted-foreground hover:text-red-500'
         >
           <Trash2Icon className='size-3.5' />
           {t('settings.removeProvider')}
-        </button>
+        </Button>
       </div>
 
       <AlertDialog
@@ -961,30 +967,31 @@ export default function SettingsPage() {
                       <h3 className='text-foreground text-sm font-semibold'>
                         {t('settings.addProviderPickType')}
                       </h3>
-                      <button
-                        type='button'
+                      <Button
+                        variant='ghost'
+                        size='icon-xs'
                         onClick={() => setShowAddCard(false)}
-                        className='text-muted-foreground hover:text-foreground cursor-pointer transition'
+                        className='text-muted-foreground hover:text-foreground'
                       >
                         <XIcon className='size-4' />
-                      </button>
+                      </Button>
                     </div>
                     <div className='grid grid-cols-2 gap-2'>
                       {ADD_PROVIDER_OPTIONS.map(
                         ({ value, labelKey, descKey }) => (
-                          <button
+                          <Button
                             key={value}
-                            type='button'
+                            variant='outline'
                             onClick={() => handleAddProvider(value)}
-                            className='border-border bg-card text-muted-foreground hover:border-foreground/30 flex cursor-pointer flex-col items-start rounded-md border px-3 py-2.5 text-left transition'
+                            className='hover:border-foreground/30 flex h-auto flex-col items-start px-3 py-2.5 text-left'
                           >
                             <span className='text-foreground text-sm font-medium'>
                               {t(labelKey)}
                             </span>
-                            <span className='text-muted-foreground text-xs'>
+                            <span className='text-muted-foreground text-xs font-normal'>
                               {t(descKey)}
                             </span>
-                          </button>
+                          </Button>
                         ),
                       )}
                     </div>
