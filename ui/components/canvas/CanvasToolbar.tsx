@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import {
@@ -10,6 +10,9 @@ import {
   TypeIcon,
   LoaderCircleIcon,
   LanguagesIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  SearchIcon,
 } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
@@ -29,8 +32,8 @@ import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import {
   useLlmModelsQuery,
   useLlmReadyQuery,
-  LOCAL_LLM_PRESET_LABELS,
-  parsePresetFromModelId,
+  getProviderForModel,
+  type LlmModelEntry,
 } from '@/lib/query/hooks'
 import { useDocumentMutations, useLlmMutations } from '@/lib/query/mutations'
 import { useOperationStore } from '@/lib/stores/operationStore'
@@ -163,6 +166,77 @@ function WorkflowButtons() {
   )
 }
 
+function ModelPickerList({
+  models,
+  selectedModel,
+  onSelect,
+  getModelBadge,
+  getModelDisplayName,
+}: {
+  models: LlmModelEntry[]
+  selectedModel?: string
+  onSelect: (id: string) => void
+  getModelBadge: (model: LlmModelEntry) => React.ReactNode
+  getModelDisplayName: (model: LlmModelEntry) => string
+}) {
+  const { t } = useTranslation()
+  const [search, setSearch] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const timer = setTimeout(() => inputRef.current?.focus(), 50)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!search) return models
+    const q = search.toLowerCase()
+    return models.filter((m) => m.id.toLowerCase().includes(q))
+  }, [models, search])
+
+  return (
+    <div className='flex flex-col'>
+      <div className='border-border flex items-center gap-1.5 border-b px-2.5 py-1.5'>
+        <SearchIcon className='text-muted-foreground size-3.5 shrink-0' />
+        <input
+          ref={inputRef}
+          type='text'
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t('llm.searchPlaceholder')}
+          className='text-foreground placeholder:text-muted-foreground w-full bg-transparent py-0.5 text-xs outline-none'
+        />
+      </div>
+      <div className='max-h-64 overflow-y-auto p-1'>
+        {filtered.map((model, index) => (
+          <button
+            key={model.id}
+            type='button'
+            data-testid={`llm-model-option-${index}`}
+            onClick={() => onSelect(model.id)}
+            className={`flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition ${
+              model.id === selectedModel
+                ? 'bg-accent text-accent-foreground'
+                : 'hover:bg-accent/50'
+            }`}
+          >
+            {getModelBadge(model)}
+            <span className='truncate'>{getModelDisplayName(model)}</span>
+            {model.id === selectedModel && (
+              <CheckIcon className='ml-auto size-3 shrink-0' />
+            )}
+          </button>
+        ))}
+        {filtered.length === 0 && (
+          <p className='text-muted-foreground px-2 py-3 text-center text-xs'>
+            {t('llm.noModelsFound')}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function LlmStatusPopover() {
   const { data: llmModels = [] } = useLlmModelsQuery()
   const llmSelectedModel = useLlmUiStore((state) => state.selectedModel)
@@ -172,8 +246,8 @@ function LlmStatusPopover() {
   const { llmSetSelectedModel, llmSetSelectedLanguage, llmToggleLoadUnload } =
     useLlmMutations()
   const { t } = useTranslation()
-  const apiKeys = usePreferencesStore((state) => state.apiKeys)
-  const localLlm = usePreferencesStore((state) => state.localLlm)
+  const providers = usePreferencesStore((state) => state.providers)
+  const [modelPickerOpen, setModelPickerOpen] = useState(false)
 
   const selectedModelInfo = useMemo(
     () => llmModels.find((m) => m.id === llmSelectedModel),
@@ -182,10 +256,16 @@ function LlmStatusPopover() {
   const isApiModel =
     selectedModelInfo?.source !== 'local' &&
     selectedModelInfo?.source !== undefined
+
+  // Check if cloud API key is missing for the selected model
+  const selectedProvider = useMemo(() => {
+    if (!selectedModelInfo) return undefined
+    return getProviderForModel(selectedModelInfo.id, selectedModelInfo.source)
+  }, [selectedModelInfo])
   const apiKeyMissing =
     isApiModel &&
     selectedModelInfo?.source !== 'openai-compatible' &&
-    !apiKeys[selectedModelInfo!.source]
+    !selectedProvider
 
   const activeLanguages = useMemo(
     () => selectedModelInfo?.languages ?? [],
@@ -217,6 +297,47 @@ function LlmStatusPopover() {
     }))
   }, [llmModels, llmSelectedLanguage, llmSelectedModel])
 
+  /** Get the display name for the model, stripping the provider/id prefix. */
+  const getModelDisplayName = (model: (typeof llmModels)[0]) => {
+    if (
+      model.source === 'openai-compatible' &&
+      model.id.split(':').length >= 3
+    ) {
+      return model.id.split(':').slice(2).join(':')
+    }
+    if (model.id.includes(':')) {
+      return model.id.split(':').slice(1).join(':')
+    }
+    return model.id
+  }
+
+  /** Get the badge label for a model based on its provider config. */
+  const getModelBadge = (model: (typeof llmModels)[0]) => {
+    if (model.source === 'local') {
+      return (
+        <span className='bg-muted text-muted-foreground shrink-0 rounded px-1 py-0.5 text-[10px] leading-none font-semibold whitespace-nowrap uppercase'>
+          Local
+        </span>
+      )
+    }
+    const provider = model.originProviderId
+      ? providers.find((p) => p.id === model.originProviderId)
+      : providers.find((p) => p.type === model.source)
+    const label = provider?.label ?? getProviderDisplayName(model.source)
+    const isCompatible = model.source === 'openai-compatible'
+    return (
+      <span
+        className={`shrink-0 rounded px-1 py-0.5 text-[10px] leading-none font-semibold whitespace-nowrap uppercase ${
+          isCompatible
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            : 'bg-primary/10 text-primary'
+        }`}
+      >
+        {label}
+      </span>
+    )
+  }
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -242,9 +363,9 @@ function LlmStatusPopover() {
             }
           />
           LLM
-          {llmReady && selectedModelInfo?.source === 'openai-compatible' && (
-            <span className='max-w-[80px] truncate text-[10px] opacity-80'>
-              {selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id}
+          {llmReady && selectedModelInfo && (
+            <span className='max-w-[100px] truncate text-[10px] opacity-80'>
+              {getModelDisplayName(selectedModelInfo)}
             </span>
           )}
         </button>
@@ -255,56 +376,41 @@ function LlmStatusPopover() {
             {t('panels.llm')}
           </p>
 
-          <Select value={llmSelectedModel} onValueChange={llmSetSelectedModel}>
-            <SelectTrigger data-testid='llm-model-select' className='w-full'>
-              <SelectValue placeholder={t('llm.selectPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent position='popper'>
-              {llmModels.map((model, index) => (
-                <SelectItem
-                  key={model.id}
-                  value={model.id}
-                  data-testid={`llm-model-option-${index}`}
-                >
-                  <span className='flex items-center gap-2'>
-                    {model.source === 'openai-compatible' ? (
-                      (() => {
-                        const preset = parsePresetFromModelId(model.id)
-                        const isTeal =
-                          preset === 'preset1' || preset === 'preset2'
-                        return (
-                          <span
-                            className={`rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase ${
-                              isTeal
-                                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
-                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            }`}
-                          >
-                            {preset
-                              ? (LOCAL_LLM_PRESET_LABELS[preset] ?? preset)
-                              : 'OpenAI-like'}
-                          </span>
-                        )
-                      })()
-                    ) : model.source !== 'local' ? (
-                      <span className='bg-primary/10 text-primary rounded px-1 py-0.5 text-[10px] leading-none font-semibold uppercase'>
-                        {getProviderDisplayName(model.source)}
-                      </span>
-                    ) : null}
-                    {/* Display model name: strip "openai-compatible:preset:" prefix */}
-                    {model.source === 'openai-compatible' &&
-                    model.id.split(':').length >= 3
-                      ? model.id.split(':').slice(2).join(':')
-                      : model.id.includes(':')
-                        ? model.id.split(':')[1]
-                        : model.id}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={modelPickerOpen} onOpenChange={setModelPickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                data-testid='llm-model-select'
+                className="border-input [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50 flex h-7 w-full items-center justify-between gap-1.5 rounded-md border bg-transparent px-2 py-1 text-xs whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px]"
+              >
+                <span className='flex items-center gap-1.5 truncate'>
+                  {llmSelectedModel && selectedModelInfo ? (
+                    <>
+                      {getModelBadge(selectedModelInfo)}
+                      {getModelDisplayName(selectedModelInfo)}
+                    </>
+                  ) : (
+                    <span className='text-muted-foreground'>
+                      {t('llm.selectPlaceholder')}
+                    </span>
+                  )}
+                </span>
+                <ChevronDownIcon className='size-3.5 shrink-0 opacity-50' />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align='start' className='w-72 p-0'>
+              <ModelPickerList
+                models={llmModels}
+                selectedModel={llmSelectedModel}
+                onSelect={(id) => {
+                  llmSetSelectedModel(id)
+                  setModelPickerOpen(false)
+                }}
+                getModelBadge={getModelBadge}
+                getModelDisplayName={getModelDisplayName}
+              />
+            </PopoverContent>
+          </Popover>
 
-          {/* API key warning */}
           {apiKeyMissing && (
             <p className='text-xs text-amber-500'>
               {t('llm.apiKeyMissing', {
@@ -313,56 +419,42 @@ function LlmStatusPopover() {
             </p>
           )}
 
-          {/* Loaded model info card */}
           {llmReady &&
-            selectedModelInfo?.source === 'openai-compatible' &&
+            selectedModelInfo &&
             (() => {
-              const infoPreset = parsePresetFromModelId(selectedModelInfo.id)
-              const isTeal =
-                infoPreset === 'preset1' || infoPreset === 'preset2'
-              const presetLabel = infoPreset
-                ? (LOCAL_LLM_PRESET_LABELS[infoPreset] ?? infoPreset)
-                : 'OpenAI-like'
-              const presetCfg = infoPreset
-                ? localLlm.presets[infoPreset]
+              const provider = selectedModelInfo.originProviderId
+                ? providers.find(
+                    (p) => p.id === selectedModelInfo.originProviderId,
+                  )
                 : undefined
-              const modelName =
-                selectedModelInfo.id.split(':').length >= 3
-                  ? selectedModelInfo.id.split(':').slice(2).join(':')
-                  : (selectedModelInfo.id.split(':')[1] ?? selectedModelInfo.id)
+              const modelName = getModelDisplayName(selectedModelInfo)
+              const configParts: string[] = []
+              if (provider?.temperature != null)
+                configParts.push(`temp ${provider.temperature}`)
+              if (provider?.maxTokens != null)
+                configParts.push(`${provider.maxTokens} tokens`)
               return (
-                <div
-                  className={`rounded-md px-2.5 py-2 text-xs ${
-                    isTeal
-                      ? 'border border-teal-500/20 bg-teal-500/5'
-                      : 'border border-emerald-500/20 bg-emerald-500/5'
-                  }`}
-                >
-                  <div className='flex items-center gap-1.5'>
-                    <span
-                      className={`size-1.5 rounded-full ${
-                        isTeal ? 'bg-teal-500' : 'bg-emerald-500'
-                      }`}
-                    />
-                    <span
-                      className={`font-medium ${
-                        isTeal
-                          ? 'text-teal-700 dark:text-teal-400'
-                          : 'text-emerald-700 dark:text-emerald-400'
-                      }`}
-                    >
-                      {t('llm.localModelActive')}
-                    </span>
+                <div className='rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2 text-xs'>
+                  <div className='flex items-center justify-between'>
+                    <div className='flex items-center gap-1.5'>
+                      <span className='size-1.5 rounded-full bg-emerald-500' />
+                      <span className='font-medium text-emerald-700 dark:text-emerald-400'>
+                        {t('llm.statusReady')}
+                      </span>
+                    </div>
+                    {provider && (
+                      <span className='text-muted-foreground text-[10px] uppercase'>
+                        {provider.label}
+                      </span>
+                    )}
                   </div>
-                  <p className='text-muted-foreground mt-1'>
-                    {t('llm.localModelName', { name: modelName })}
-                  </p>
-                  <p className='text-muted-foreground mt-0.5'>
-                    {presetLabel}
-                    {presetCfg?.temperature != null &&
-                      ` · temp ${presetCfg.temperature}`}
-                    {presetCfg?.maxTokens != null &&
-                      ` · ${presetCfg.maxTokens} tokens`}
+                  <p className='text-muted-foreground mt-1 truncate'>
+                    {modelName}
+                    {configParts.length > 0 && (
+                      <span className='ml-1 opacity-60'>
+                        · {configParts.join(' · ')}
+                      </span>
+                    )}
                   </p>
                 </div>
               )

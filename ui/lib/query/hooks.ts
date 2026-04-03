@@ -8,17 +8,55 @@ import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import {
   usePreferencesStore,
-  ALL_PRESETS,
-  type LocalLlmPreset,
+  isCloudProvider,
+  type ProviderConfig,
 } from '@/lib/stores/preferencesStore'
 import type { LlmModelInfo } from '@/lib/generated/protocol/LlmModelInfo'
 import i18n from '@/lib/i18n'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
 
-/** Frontend-extended model entry with origin tracking. */
+/** Frontend-extended model entry with provider origin tracking. */
 export type LlmModelEntry = LlmModelInfo & {
-  /** Which local-llm preset this model belongs to (undefined for cloud models). */
-  originPreset?: LocalLlmPreset
+  /** ID of the ProviderConfig this model belongs to. */
+  originProviderId?: number
+}
+
+/** Extract provider ID from a frontend model ID like "openai-compatible:5:qwen2.5:7b". */
+export const getProviderIdFromModelId = (
+  modelId: string,
+): number | undefined => {
+  const parts = modelId.split(':')
+  if (parts[0] === 'openai-compatible' && parts.length >= 3) {
+    const id = parseInt(parts[1], 10)
+    if (!isNaN(id)) return id
+  }
+  return undefined
+}
+
+/** Look up the ProviderConfig for a given model, either from its encoded ID or its source field. */
+export const getProviderForModel = (
+  modelId: string,
+  source?: string,
+): ProviderConfig | undefined => {
+  const { providers } = usePreferencesStore.getState()
+  const providerId = getProviderIdFromModelId(modelId)
+  if (providerId !== undefined)
+    return providers.find((p) => p.id === providerId)
+  if (source && source !== 'local')
+    return providers.find((p) => p.type === source)
+  return undefined
+}
+
+/**
+ * Convert frontend model ID to backend format.
+ * "openai-compatible:5:qwen2.5:7b" → "openai-compatible:qwen2.5:7b"
+ */
+export const toBackendModelId = (modelId: string): string => {
+  if (getProviderIdFromModelId(modelId) !== undefined) {
+    const parts = modelId.split(':')
+    return [parts[0], ...parts.slice(2)].join(':')
+  }
+  return modelId
 }
 
 export const useDocumentsCountQuery = (enabled = true) =>
@@ -74,14 +112,13 @@ export const useFontsQuery = () =>
 export const useLlmModelsQuery = () => {
   const [language, setLanguage] = useState(i18n.language)
   const rpcConnected = useRpcConnection()
-  const localLlmPresets = usePreferencesStore((state) => state.localLlm.presets)
-  const hasCompatible = ALL_PRESETS.some(
-    (p) =>
-      localLlmPresets[p].baseUrl?.trim() &&
-      localLlmPresets[p].modelName?.trim(),
+  const providers = usePreferencesStore((state) => state.providers)
+  const configVersion = usePreferencesStore(
+    (state) => state.providersConfigVersion,
   )
-  const compatibleConfigVersion = usePreferencesStore(
-    (state) => state.openAiCompatibleConfigVersion,
+
+  const hasCompatible = providers.some(
+    (p) => !isCloudProvider(p.type) && p.baseUrl?.trim(),
   )
 
   useEffect(() => {
@@ -98,7 +135,7 @@ export const useLlmModelsQuery = () => {
     queryKey: queryKeys.llm.models(
       language ?? 'default',
       hasCompatible ? 'configured' : undefined,
-      compatibleConfigVersion,
+      configVersion,
     ),
     queryFn: async () => {
       const raw = await api.llmList(language)
@@ -107,70 +144,82 @@ export const useLlmModelsQuery = () => {
         models.find((m) => m.source !== 'local' && m.languages.length > 0)
           ?.languages ?? []
 
-      // Inject a model entry for each preset that has baseUrl + modelName
-      for (const preset of ALL_PRESETS) {
-        const cfg = localLlmPresets[preset]
-        const baseUrl = cfg.baseUrl?.trim()
-        const modelName = cfg.modelName?.trim()
-        if (baseUrl && modelName) {
-          const id = `openai-compatible:${preset}:${modelName}`
+      // Tag cloud models with their provider ID
+      for (const model of models) {
+        if (model.source !== 'local') {
+          const provider = providers.find((p) => p.type === model.source)
+          if (provider) model.originProviderId = provider.id
+        }
+      }
+
+      // Discover models from self-hosted providers
+      const selfHosted = providers.filter(
+        (p) => !isCloudProvider(p.type) && p.baseUrl?.trim(),
+      )
+      const discoveryResults = await Promise.allSettled(
+        selfHosted.map(async (provider) => {
+          const result = await api.llmPing(
+            provider.baseUrl,
+            provider.apiKey || undefined,
+          )
+          return { provider, models: result.ok ? result.models : [] }
+        }),
+      )
+      for (const result of discoveryResults) {
+        if (result.status !== 'fulfilled') continue
+        const { provider, models: discovered } = result.value
+        for (const modelName of discovered) {
+          const id = `openai-compatible:${provider.id}:${modelName}`
           if (!models.some((m) => m.id === id)) {
             models.push({
               id,
               languages: apiLanguages,
               source: 'openai-compatible',
-              originPreset: preset,
+              originProviderId: provider.id,
             })
           }
         }
       }
 
-      return models
+      // Also inject any pinned models not already discovered
+      for (const provider of selfHosted) {
+        for (const modelName of provider.pinnedModels) {
+          const id = `openai-compatible:${provider.id}:${modelName}`
+          if (!models.some((m) => m.id === id)) {
+            models.push({
+              id,
+              languages: apiLanguages,
+              source: 'openai-compatible',
+              originProviderId: provider.id,
+            })
+          }
+        }
+      }
+
+      // Filter by visibility: only keep models whose provider exists and has
+      // showAllModels enabled, or whose name is pinned in that provider.
+      // Cloud models without a matching provider are hidden (provider removed).
+      return models.filter((model) => {
+        if (model.source === 'local') return true // local models always visible
+        if (!model.originProviderId) return false // cloud model with no matching provider — hide
+        const provider = providers.find((p) => p.id === model.originProviderId)
+        if (!provider) return false // provider was removed — hide its models
+        if (provider.showAllModels) return true
+        // Check if this model's name is pinned
+        const modelName =
+          model.source === 'openai-compatible' &&
+          model.id.split(':').length >= 3
+            ? model.id.split(':').slice(2).join(':')
+            : model.id.includes(':')
+              ? model.id.split(':').slice(1).join(':')
+              : model.id
+        return provider.pinnedModels.includes(modelName)
+      })
     },
     enabled: rpcConnected,
     staleTime: hasCompatible ? 0 : 5 * 60 * 1000,
   })
 }
-
-/** Resolve the preset label for a local-llm model. */
-export const LOCAL_LLM_PRESET_LABELS: Record<string, string> = {
-  ollama: 'Ollama',
-  lmstudio: 'LM Studio',
-  preset1: 'Preset 1',
-  preset2: 'Preset 2',
-}
-
-/** Extract the preset from a model ID like "openai-compatible:preset1:modelName". */
-export const parsePresetFromModelId = (
-  modelId: string,
-): LocalLlmPreset | undefined => {
-  const parts = modelId.split(':')
-  if (parts[0] === 'openai-compatible' && parts.length >= 3) {
-    const preset = parts[1] as LocalLlmPreset
-    if (ALL_PRESETS.includes(preset)) return preset
-  }
-  return undefined
-}
-
-/**
- * Convert frontend model ID (openai-compatible:preset1:modelName)
- * to backend format (openai-compatible:modelName).
- */
-export const toBackendModelId = (modelId: string): string => {
-  if (parsePresetFromModelId(modelId)) {
-    const parts = modelId.split(':')
-    return [parts[0], ...parts.slice(2)].join(':')
-  }
-  return modelId
-}
-
-export const useApiKeyQuery = (provider: string, enabled = true) =>
-  useQuery({
-    queryKey: queryKeys.llm.apiKey(provider),
-    queryFn: () => api.getApiKey(provider),
-    enabled,
-    staleTime: 10 * 60 * 1000,
-  })
 
 export const useLlmReadyQuery = () => {
   const selectedModel = useLlmUiStore((state) => state.selectedModel)

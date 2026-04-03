@@ -10,9 +10,7 @@ import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
 import {
   usePreferencesStore,
-  ALL_PRESETS,
-  type LocalLlmPresetConfig,
-  type LocalLlmPreset,
+  isCloudProvider,
 } from '@/lib/stores/preferencesStore'
 import { queryKeys } from '@/lib/query/keys'
 import {
@@ -23,6 +21,11 @@ import {
   flushMaskSync as flushMaskSyncQueue,
   flushTextBlockSync,
 } from '@/lib/services/syncQueues'
+import {
+  getProviderForModel,
+  toBackendModelId,
+  type LlmModelEntry,
+} from '@/lib/query/hooks'
 import i18n from '@/lib/i18n'
 
 const invalidateCurrentDocument = async (
@@ -49,25 +52,6 @@ const findModelLanguages = (
   modelId?: string,
 ) => models.find((model) => model.id === modelId)?.languages ?? []
 
-const apiLanguageToBackendName = (language?: string) => {
-  switch (language) {
-    case 'en-US':
-      return 'English'
-    case 'zh-CN':
-      return '简体中文'
-    case 'zh-TW':
-      return '繁體中文'
-    case 'ja-JP':
-      return '日本語'
-    case 'ru-RU':
-      return 'Русский'
-    case 'es-ES':
-      return 'Español'
-    default:
-      return language
-  }
-}
-
 const pickLanguage = (
   models: { id: string; languages: string[] }[],
   modelId?: string,
@@ -79,63 +63,40 @@ const pickLanguage = (
   return languages[0]
 }
 
+/** Check if any self-hosted provider is configured. */
 const hasCompatibleConfig = () => {
-  const { presets } = usePreferencesStore.getState().localLlm
-  return ALL_PRESETS.some(
-    (p) => presets[p].baseUrl?.trim() && presets[p].modelName?.trim(),
-  )
+  const { providers } = usePreferencesStore.getState()
+  return providers.some((p) => !isCloudProvider(p.type) && p.baseUrl?.trim())
 }
 
-/** Extract the preset from a model ID like "openai-compatible:preset1:modelName". */
-const resolvePresetFromModelId = (
-  modelId: string,
-): LocalLlmPreset | undefined => {
-  const parts = modelId.split(':')
-  if (parts[0] === 'openai-compatible' && parts.length >= 3) {
-    const preset = parts[1] as LocalLlmPreset
-    if (ALL_PRESETS.includes(preset)) return preset
-  }
-  return undefined
-}
-
-const getPresetConfigForModel = (
-  modelId: string,
-): LocalLlmPresetConfig | undefined => {
-  const preset = resolvePresetFromModelId(modelId)
-  if (!preset) return undefined
-  return usePreferencesStore.getState().localLlm.presets[preset]
-}
-
-const getBaseUrlForModel = (modelId: string) => {
-  const cfg = getPresetConfigForModel(modelId)
-  return cfg?.baseUrl?.trim() || undefined
-}
-
-/**
- * Convert frontend model ID (openai-compatible:preset1:modelName)
- * to backend format (openai-compatible:modelName).
- */
-const toBackendModelId = (modelId: string): string => {
-  if (resolvePresetFromModelId(modelId)) {
-    const parts = modelId.split(':')
-    return [parts[0], ...parts.slice(2)].join(':')
-  }
-  return modelId
-}
-
+/** Get the cached LLM models from React Query. */
 const getCachedLlmModels = (queryClient: QueryClient) =>
   (queryClient.getQueryData(
     queryKeys.llm.models(
       i18n.language,
       hasCompatibleConfig() ? 'configured' : undefined,
-      usePreferencesStore.getState().openAiCompatibleConfigVersion,
+      usePreferencesStore.getState().providersConfigVersion,
     ),
-  ) ?? []) as {
-    id: string
-    languages: string[]
-    source: string
-    origin?: string
-  }[]
+  ) ?? []) as LlmModelEntry[]
+
+/**
+ * Resolve all parameters needed to load/use a model from its provider config.
+ * For cloud providers, apiKey/baseUrl are omitted (backend reads from keyring).
+ */
+const resolveModelParams = (selectedModel: string, models: LlmModelEntry[]) => {
+  const modelInfo = models.find((m) => m.id === selectedModel)
+  const provider = getProviderForModel(selectedModel, modelInfo?.source)
+  const cloud = provider ? isCloudProvider(provider.type) : false
+
+  return {
+    backendModelId: toBackendModelId(selectedModel),
+    apiKey: provider && !cloud ? provider.apiKey || undefined : undefined,
+    baseUrl: provider && !cloud ? provider.baseUrl || undefined : undefined,
+    temperature: provider?.temperature ?? undefined,
+    maxTokens: provider?.maxTokens ?? undefined,
+    customSystemPrompt: provider?.customSystemPrompt || undefined,
+  }
+}
 
 export const useProgressActions = () => {
   const setProgress = useCallback(
@@ -554,31 +515,18 @@ export const useDocumentMutations = () => {
       })
       try {
         const models = getCachedLlmModels(queryClient)
-        const modelInfo = models.find((m) => m.id === selectedModel)
-        const language = selectedLanguage
-        const presetCfg = selectedModel
-          ? getPresetConfigForModel(selectedModel)
+        const params = selectedModel
+          ? resolveModelParams(selectedModel, models)
           : undefined
-        const llmApiKey = presetCfg
-          ? presetCfg.apiKey || undefined
-          : modelInfo && modelInfo.source !== 'local'
-            ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-            : undefined
-        const llmBaseUrl =
-          modelInfo?.source === 'openai-compatible'
-            ? getBaseUrlForModel(selectedModel!)
-            : undefined
         await api.process({
           index: resolvedIndex,
-          llmModelId: selectedModel
-            ? toBackendModelId(selectedModel)
-            : selectedModel,
-          llmApiKey,
-          llmBaseUrl,
-          llmTemperature: presetCfg?.temperature ?? undefined,
-          llmMaxTokens: presetCfg?.maxTokens ?? undefined,
-          llmCustomSystemPrompt: presetCfg?.customSystemPrompt || undefined,
-          language,
+          llmModelId: params?.backendModelId ?? selectedModel,
+          llmApiKey: params?.apiKey,
+          llmBaseUrl: params?.baseUrl,
+          llmTemperature: params?.temperature,
+          llmMaxTokens: params?.maxTokens,
+          llmCustomSystemPrompt: params?.customSystemPrompt,
+          language: selectedLanguage,
           shaderEffect: renderEffect,
           shaderStroke: renderStroke,
           fontFamily,
@@ -607,30 +555,17 @@ export const useDocumentMutations = () => {
     })
     try {
       const models = getCachedLlmModels(queryClient)
-      const modelInfo = models.find((m) => m.id === selectedModel)
-      const language = selectedLanguage
-      const presetCfg2 = selectedModel
-        ? getPresetConfigForModel(selectedModel)
+      const params = selectedModel
+        ? resolveModelParams(selectedModel, models)
         : undefined
-      const llmApiKey = presetCfg2
-        ? presetCfg2.apiKey || undefined
-        : modelInfo && modelInfo.source !== 'local'
-          ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-          : undefined
-      const llmBaseUrl =
-        modelInfo?.source === 'openai-compatible'
-          ? getBaseUrlForModel(selectedModel!)
-          : undefined
       await api.process({
-        llmModelId: selectedModel
-          ? toBackendModelId(selectedModel)
-          : selectedModel,
-        llmApiKey,
-        llmBaseUrl,
-        llmTemperature: presetCfg2?.temperature ?? undefined,
-        llmMaxTokens: presetCfg2?.maxTokens ?? undefined,
-        llmCustomSystemPrompt: presetCfg2?.customSystemPrompt || undefined,
-        language,
+        llmModelId: params?.backendModelId ?? selectedModel,
+        llmApiKey: params?.apiKey,
+        llmBaseUrl: params?.baseUrl,
+        llmTemperature: params?.temperature,
+        llmMaxTokens: params?.maxTokens,
+        llmCustomSystemPrompt: params?.customSystemPrompt,
+        language: selectedLanguage,
         shaderEffect: renderEffect,
         shaderStroke: renderStroke,
         fontFamily,
@@ -746,32 +681,20 @@ export const useLlmMutations = () => {
 
     useLlmUiStore.getState().setLoading(true)
     queryClient.setQueryData(readyKey, false)
+
     const models = getCachedLlmModels(queryClient)
-    const modelInfo = models.find((m) => m.id === selectedModel)
-    const presetCfg = selectedModel
-      ? getPresetConfigForModel(selectedModel)
-      : undefined
-    const apiKey = presetCfg
-      ? presetCfg.apiKey || undefined
-      : modelInfo && modelInfo.source !== 'local'
-        ? usePreferencesStore.getState().apiKeys[modelInfo.source]
-        : undefined
-    const baseUrl =
-      modelInfo?.source === 'openai-compatible'
-        ? getBaseUrlForModel(selectedModel)
-        : undefined
-    const backendModelId = toBackendModelId(selectedModel)
+    const params = resolveModelParams(selectedModel, models)
     await api.llmLoad(
-      backendModelId,
-      apiKey,
-      baseUrl,
-      presetCfg?.temperature ?? undefined,
-      presetCfg?.maxTokens ?? undefined,
-      presetCfg?.customSystemPrompt || undefined,
+      params.backendModelId,
+      params.apiKey,
+      params.baseUrl,
+      params.temperature,
+      params.maxTokens,
+      params.customSystemPrompt,
     )
     queryClient.setQueryData(
       readyKey,
-      await api.llmReady(backendModelId).catch(() => false),
+      await api.llmReady(params.backendModelId).catch(() => false),
     )
     await setProgress(100, ProgressBarStatus.Paused)
   }, [queryClient, setProgress])
@@ -803,34 +726,14 @@ export const useLlmMutations = () => {
   )
 
   const llmList = useCallback(async () => {
-    const compatibleConfigVersion =
-      usePreferencesStore.getState().openAiCompatibleConfigVersion
+    const configVersion = usePreferencesStore.getState().providersConfigVersion
     const models = await api.llmList(i18n.language)
-    const providers = Array.from(
-      new Set(
-        models
-          .map((model) => model.source)
-          .filter((source) => source && source !== 'local'),
-      ),
-    )
-    for (const provider of providers) {
-      try {
-        const key = await queryClient.fetchQuery({
-          queryKey: queryKeys.llm.apiKey(provider),
-          queryFn: () => api.getApiKey(provider),
-          staleTime: 10 * 60 * 1000,
-        })
-        usePreferencesStore.getState().setApiKey(provider, key ?? '')
-      } catch (error) {
-        console.error(`Failed to hydrate API key for ${provider}`, error)
-      }
-    }
 
     queryClient.setQueryData(
       queryKeys.llm.models(
         i18n.language,
         hasCompatibleConfig() ? 'configured' : undefined,
-        compatibleConfigVersion,
+        configVersion,
       ),
       models,
     )

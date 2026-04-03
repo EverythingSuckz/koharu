@@ -20,13 +20,11 @@ import {
 import i18n from '@/lib/i18n'
 import { getQueryClient } from '@/lib/query/client'
 import { queryKeys } from '@/lib/query/keys'
-import { useApiKeyQuery, useDocumentsCountQuery } from '@/lib/query/hooks'
+import { useDocumentsCountQuery } from '@/lib/query/hooks'
 import { useDownloadStore } from '@/lib/downloads'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import { useOperationStore } from '@/lib/stores/operationStore'
-import { usePreferencesStore } from '@/lib/stores/preferencesStore'
-import { isTauri } from '@/lib/backend'
 import { useRpcConnection } from '@/hooks/useRpcConnection'
 import type {
   DocumentSummary,
@@ -42,20 +40,8 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
     pathname === '/bootstrap' || pathname === '/splashscreen'
   const hasConnectedRef = useRef(false)
   const setTotalPages = useEditorUiStore((state) => state.setTotalPages)
-  const setApiKey = usePreferencesStore((state) => state.setApiKey)
   const rpcConnected = useRpcConnection()
-  const shouldQueryApiKeys = rpcConnected && !isStartupRoute && isTauri()
-  const { data: documentsCount } = useDocumentsCountQuery(
-    rpcConnected && !isStartupRoute,
-  )
-  const openAiApiKeyQuery = useApiKeyQuery('openai', shouldQueryApiKeys)
-  const openAiCompatibleApiKeyQuery = useApiKeyQuery(
-    'openai-compatible',
-    shouldQueryApiKeys,
-  )
-  const geminiApiKeyQuery = useApiKeyQuery('gemini', shouldQueryApiKeys)
-  const claudeApiKeyQuery = useApiKeyQuery('claude', shouldQueryApiKeys)
-  const deepSeekApiKeyQuery = useApiKeyQuery('deepseek', shouldQueryApiKeys)
+  const { data: documentsCount } = useDocumentsCountQuery(rpcConnected)
 
   const applyDocumentsSnapshot = (documents: DocumentSummary[]) => {
     const count = documents.length
@@ -169,42 +155,6 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   }, [documentsCount, setTotalPages])
 
   useEffect(() => {
-    if (openAiApiKeyQuery.status === 'success') {
-      setApiKey('openai', openAiApiKeyQuery.data ?? '')
-    }
-  }, [openAiApiKeyQuery.data, openAiApiKeyQuery.status, setApiKey])
-
-  useEffect(() => {
-    if (openAiCompatibleApiKeyQuery.status === 'success') {
-      setApiKey('openai-compatible', openAiCompatibleApiKeyQuery.data ?? '')
-    }
-  }, [
-    openAiCompatibleApiKeyQuery.data,
-    openAiCompatibleApiKeyQuery.status,
-    setApiKey,
-  ])
-
-  useEffect(() => {
-    if (geminiApiKeyQuery.status === 'success') {
-      setApiKey('gemini', geminiApiKeyQuery.data ?? '')
-    }
-  }, [geminiApiKeyQuery.data, geminiApiKeyQuery.status, setApiKey])
-
-  useEffect(() => {
-    if (claudeApiKeyQuery.status === 'success') {
-      setApiKey('claude', claudeApiKeyQuery.data ?? '')
-    }
-  }, [claudeApiKeyQuery.data, claudeApiKeyQuery.status, setApiKey])
-
-  useEffect(() => {
-    if (deepSeekApiKeyQuery.status === 'success') {
-      setApiKey('deepseek', deepSeekApiKeyQuery.data ?? '')
-    }
-  }, [deepSeekApiKeyQuery.data, deepSeekApiKeyQuery.status, setApiKey])
-
-  useEffect(() => {
-    if (isStartupRoute) return
-
     let unlisten: (() => void) | undefined
     ;(async () => {
       try {
