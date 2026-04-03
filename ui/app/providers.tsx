@@ -41,7 +41,9 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   const hasConnectedRef = useRef(false)
   const setTotalPages = useEditorUiStore((state) => state.setTotalPages)
   const rpcConnected = useRpcConnection()
-  const { data: documentsCount } = useDocumentsCountQuery(rpcConnected)
+  const { data: documentsCount } = useDocumentsCountQuery(
+    rpcConnected && !isStartupRoute,
+  )
 
   const applyDocumentsSnapshot = (documents: DocumentSummary[]) => {
     const count = documents.length
@@ -155,6 +157,8 @@ function ProvidersBootstrap({ children }: { children: ReactNode }) {
   }, [documentsCount, setTotalPages])
 
   useEffect(() => {
+    if (isStartupRoute) return
+
     let unlisten: (() => void) | undefined
     ;(async () => {
       try {
