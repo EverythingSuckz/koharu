@@ -428,11 +428,6 @@ function LlmStatusPopover() {
                   )
                 : undefined
               const modelName = getModelDisplayName(selectedModelInfo)
-              const configParts: string[] = []
-              if (provider?.temperature != null)
-                configParts.push(`temp ${provider.temperature}`)
-              if (provider?.maxTokens != null)
-                configParts.push(`${provider.maxTokens} tokens`)
               return (
                 <div className='rounded-md border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-2 text-xs'>
                   <div className='flex items-center justify-between'>
@@ -450,11 +445,6 @@ function LlmStatusPopover() {
                   </div>
                   <p className='text-muted-foreground mt-1 truncate'>
                     {modelName}
-                    {configParts.length > 0 && (
-                      <span className='ml-1 opacity-60'>
-                        · {configParts.join(' · ')}
-                      </span>
-                    )}
                   </p>
                 </div>
               )

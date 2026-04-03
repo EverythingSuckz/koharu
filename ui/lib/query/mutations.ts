@@ -87,14 +87,16 @@ const resolveModelParams = (selectedModel: string, models: LlmModelEntry[]) => {
   const modelInfo = models.find((m) => m.id === selectedModel)
   const provider = getProviderForModel(selectedModel, modelInfo?.source)
   const cloud = provider ? isCloudProvider(provider.type) : false
+  const { llmTemperature, llmMaxTokens, llmCustomSystemPrompt } =
+    usePreferencesStore.getState()
 
   return {
     backendModelId: toBackendModelId(selectedModel),
     apiKey: provider && !cloud ? provider.apiKey || undefined : undefined,
     baseUrl: provider && !cloud ? provider.baseUrl || undefined : undefined,
-    temperature: provider?.temperature ?? undefined,
-    maxTokens: provider?.maxTokens ?? undefined,
-    customSystemPrompt: provider?.customSystemPrompt || undefined,
+    temperature: llmTemperature ?? undefined,
+    maxTokens: llmMaxTokens ?? undefined,
+    customSystemPrompt: llmCustomSystemPrompt || undefined,
   }
 }
 

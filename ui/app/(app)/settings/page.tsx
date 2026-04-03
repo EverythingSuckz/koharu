@@ -112,6 +112,113 @@ const DEFAULT_SYSTEM_PROMPT =
 const inputClass =
   'border-border bg-card text-foreground placeholder:text-muted-foreground w-full rounded-md border px-3 py-1.5 text-sm transition-colors focus:border-primary focus:outline-none'
 
+function AdvancedModelConfig() {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const llmTemperature = usePreferencesStore((s) => s.llmTemperature)
+  const llmMaxTokens = usePreferencesStore((s) => s.llmMaxTokens)
+  const llmCustomSystemPrompt = usePreferencesStore(
+    (s) => s.llmCustomSystemPrompt,
+  )
+  const setLlmConfig = usePreferencesStore((s) => s.setLlmConfig)
+
+  return (
+    <section className='mb-8'>
+      <button
+        type='button'
+        onClick={() => setOpen((v) => !v)}
+        className='text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1.5 text-sm font-bold transition'
+      >
+        <ChevronDownIcon
+          className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+        {t('settings.advancedModelConfig')}
+      </button>
+      <p className='text-muted-foreground mt-1 mb-4 text-sm'>
+        {t('settings.advancedModelConfigDescription')}
+      </p>
+
+      {open && (
+        <div className='animate-in fade-in slide-in-from-top-1 space-y-4 duration-150'>
+          <div className='grid grid-cols-2 gap-4'>
+            <div className='space-y-1'>
+              <label className='text-foreground text-sm'>
+                {t('settings.providerTemperature')}
+              </label>
+              <input
+                type='number'
+                value={llmTemperature ?? ''}
+                onChange={(e) =>
+                  setLlmConfig({
+                    llmTemperature:
+                      e.target.value === '' ? null : parseFloat(e.target.value),
+                  })
+                }
+                placeholder={t('settings.providerTemperaturePlaceholder')}
+                step={0.1}
+                min={0}
+                max={2}
+                className={inputClass}
+              />
+            </div>
+
+            <div className='space-y-1'>
+              <label className='text-foreground text-sm'>
+                {t('settings.providerMaxTokens')}
+              </label>
+              <input
+                type='number'
+                value={llmMaxTokens ?? ''}
+                onChange={(e) =>
+                  setLlmConfig({
+                    llmMaxTokens:
+                      e.target.value === ''
+                        ? null
+                        : parseInt(e.target.value, 10),
+                  })
+                }
+                placeholder={t('settings.providerMaxTokensPlaceholder')}
+                step={100}
+                min={1}
+                className={inputClass}
+              />
+            </div>
+          </div>
+
+          <div className='space-y-1'>
+            <div className='flex items-center justify-between'>
+              <label className='text-foreground text-sm'>
+                {t('settings.providerSystemPrompt')}
+              </label>
+              {llmCustomSystemPrompt && (
+                <button
+                  type='button'
+                  onClick={() => setLlmConfig({ llmCustomSystemPrompt: '' })}
+                  className='text-primary cursor-pointer text-xs hover:underline'
+                >
+                  {t('settings.providerSystemPromptReset')}
+                </button>
+              )}
+            </div>
+            <textarea
+              value={llmCustomSystemPrompt}
+              onChange={(e) =>
+                setLlmConfig({ llmCustomSystemPrompt: e.target.value })
+              }
+              placeholder={DEFAULT_SYSTEM_PROMPT}
+              rows={4}
+              className={`${inputClass} resize-y`}
+            />
+            <span className='text-muted-foreground text-xs'>
+              {t('settings.providerSystemPromptPlaceholder')}
+            </span>
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ProviderCard({
   provider,
   isOpen,
@@ -126,7 +233,6 @@ function ProviderCard({
 
   const [cloudApiKey, setCloudApiKey] = useState('')
   const [keyVisible, setKeyVisible] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const [pingState, setPingState] = useState<{
     loading: boolean
@@ -525,112 +631,23 @@ function ProviderCard({
         </div>
       )}
 
-      <button
-        type='button'
-        onClick={() => setShowAdvanced((v) => !v)}
-        className='text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-1 text-sm transition'
-      >
-        <ChevronDownIcon
-          className={`size-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
-        />
-        {t('settings.providerAdvanced')}
-      </button>
-
-      {showAdvanced && (
-        <div className='space-y-3 pl-1'>
-          <div className='space-y-1'>
-            <label className='text-foreground text-sm'>
-              {t('settings.providerTemperature')}
-            </label>
-            <input
-              type='number'
-              value={provider.temperature ?? ''}
-              onChange={(e) =>
-                updateProvider(provider.id, {
-                  temperature:
-                    e.target.value === '' ? null : parseFloat(e.target.value),
-                })
-              }
-              placeholder={t('settings.providerTemperaturePlaceholder')}
-              step={0.1}
-              min={0}
-              max={2}
-              className={inputClass}
-            />
-          </div>
-
-          <div className='space-y-1'>
-            <label className='text-foreground text-sm'>
-              {t('settings.providerMaxTokens')}
-            </label>
-            <input
-              type='number'
-              value={provider.maxTokens ?? ''}
-              onChange={(e) =>
-                updateProvider(provider.id, {
-                  maxTokens:
-                    e.target.value === '' ? null : parseInt(e.target.value, 10),
-                })
-              }
-              placeholder={t('settings.providerMaxTokensPlaceholder')}
-              step={100}
-              min={1}
-              className={inputClass}
-            />
-          </div>
-
-          <div className='space-y-1'>
-            <div className='flex items-center justify-between'>
-              <label className='text-foreground text-sm'>
-                {t('settings.providerSystemPrompt')}
-              </label>
-              {provider.customSystemPrompt && (
-                <button
-                  type='button'
-                  onClick={() =>
-                    updateProvider(provider.id, { customSystemPrompt: '' })
-                  }
-                  className='text-primary cursor-pointer text-xs hover:underline'
-                >
-                  {t('settings.providerSystemPromptReset')}
-                </button>
-              )}
-            </div>
-            <textarea
-              value={provider.customSystemPrompt}
-              onChange={(e) =>
-                updateProvider(provider.id, {
-                  customSystemPrompt: e.target.value,
-                })
-              }
-              placeholder={DEFAULT_SYSTEM_PROMPT}
-              rows={4}
-              className={`${inputClass} resize-y`}
-            />
-            <span className='text-muted-foreground text-xs'>
-              {t('settings.providerSystemPromptPlaceholder')}
-            </span>
-          </div>
-
-          <div className='border-border mt-2 border-t pt-3'>
-            <button
-              type='button'
-              onClick={() =>
-                setConfirmDialog({
-                  open: true,
-                  title: t('settings.removeProviderConfirm'),
-                  description: t('settings.removeProviderDescription'),
-                  onConfirm: () => removeProvider(provider.id),
-                })
-              }
-              className='text-muted-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs transition hover:text-red-500'
-            >
-              <Trash2Icon className='size-3.5' />
-              {t('settings.removeProvider')}
-            </button>
-          </div>
-        </div>
-      )}
+      <div className='border-border border-t pt-3'>
+        <button
+          type='button'
+          onClick={() =>
+            setConfirmDialog({
+              open: true,
+              title: t('settings.removeProviderConfirm'),
+              description: t('settings.removeProviderDescription'),
+              onConfirm: () => removeProvider(provider.id),
+            })
+          }
+          className='text-muted-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs transition hover:text-red-500'
+        >
+          <Trash2Icon className='size-3.5' />
+          {t('settings.removeProvider')}
+        </button>
+      </div>
 
       <AlertDialog
         open={confirmDialog.open}
@@ -975,6 +992,9 @@ export default function SettingsPage() {
                 )}
               </div>
             </section>
+
+            {/* Advanced Model Configuration */}
+            <AdvancedModelConfig />
 
             {/* Divider */}
             <div className='border-border mb-8 border-t' />

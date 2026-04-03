@@ -27,12 +27,6 @@ export type ProviderConfig = {
   showAllModels: boolean
   /** When showAllModels is false, only these model names appear in the picker. */
   pinnedModels: string[]
-  /** Optional temperature override. */
-  temperature: number | null
-  /** Optional max tokens override. */
-  maxTokens: number | null
-  /** Optional custom system prompt override. */
-  customSystemPrompt: string
 }
 
 const CLOUD_TYPES: ProviderType[] = ['openai', 'gemini', 'claude', 'deepseek']
@@ -65,9 +59,6 @@ const makeDefaultProvider = (
   apiKey: '',
   showAllModels: true,
   pinnedModels: [],
-  temperature: null,
-  maxTokens: null,
-  customSystemPrompt: '',
   ...overrides,
 })
 
@@ -86,6 +77,19 @@ type PreferencesState = {
   nextProviderId: number
   /** Bumped on any provider change; used as a query key dependency. */
   providersConfigVersion: number
+
+  /** Global LLM generation settings. */
+  llmTemperature: number | null
+  llmMaxTokens: number | null
+  llmCustomSystemPrompt: string
+  setLlmConfig: (
+    patch: Partial<
+      Pick<
+        PreferencesState,
+        'llmTemperature' | 'llmMaxTokens' | 'llmCustomSystemPrompt'
+      >
+    >,
+  ) => void
 
   addProvider: (type: ProviderType) => number
   updateProvider: (
@@ -115,6 +119,9 @@ const initialPreferences = {
   providers: initialProviders,
   nextProviderId: INITIAL_NEXT_ID,
   providersConfigVersion: 0,
+  llmTemperature: null,
+  llmMaxTokens: null,
+  llmCustomSystemPrompt: '',
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -128,6 +135,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         })),
 
       setFontFamily: (font) => set({ fontFamily: font }),
+
+      setLlmConfig: (patch) => set(patch),
 
       addProvider: (type) => {
         const id = get().nextProviderId
@@ -205,6 +214,9 @@ export const usePreferencesStore = create<PreferencesState>()(
         fontFamily: state.fontFamily,
         providers: state.providers,
         nextProviderId: state.nextProviderId,
+        llmTemperature: state.llmTemperature,
+        llmMaxTokens: state.llmMaxTokens,
+        llmCustomSystemPrompt: state.llmCustomSystemPrompt,
       }),
     },
   ),
