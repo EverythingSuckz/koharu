@@ -208,12 +208,13 @@ function ModelPickerList({
       </div>
       <div className='max-h-64 overflow-y-auto p-1'>
         {filtered.map((model, index) => (
-          <button
+          <Button
             key={model.id}
-            type='button'
+            variant='ghost'
+            size='xs'
             data-testid={`llm-model-option-${index}`}
             onClick={() => onSelect(model.id)}
-            className={`flex w-full cursor-pointer items-center gap-2 rounded-sm px-1.5 py-1 text-left text-xs transition ${
+            className={`w-full justify-start gap-2 text-left font-normal ${
               model.id === selectedModel
                 ? 'bg-accent text-accent-foreground'
                 : 'hover:bg-accent/50'
@@ -224,7 +225,7 @@ function ModelPickerList({
             {model.id === selectedModel && (
               <CheckIcon className='ml-auto size-3 shrink-0' />
             )}
-          </button>
+          </Button>
         ))}
         {filtered.length === 0 && (
           <p className='text-muted-foreground px-2 py-3 text-center text-xs'>
