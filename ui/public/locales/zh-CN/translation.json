@@ -113,6 +113,7 @@
     "statusIdle": "LLM 未加载",
     "searchPlaceholder": "搜索模型...",
     "noModelsFound": "未找到模型",
+    "sourceLocal": "本地",
     "languages": {
       "en-US": "美国英语",
       "zh-CN": "中文（中国）",

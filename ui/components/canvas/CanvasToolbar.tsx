@@ -301,7 +301,7 @@ function LlmStatusPopover() {
     if (model.source === 'local') {
       return (
         <span className='bg-muted text-muted-foreground shrink-0 rounded px-1 py-0.5 text-[10px] leading-none font-semibold whitespace-nowrap uppercase'>
-          Local
+          {t('llm.sourceLocal')}
         </span>
       )
     }

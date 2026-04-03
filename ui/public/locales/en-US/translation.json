@@ -113,6 +113,7 @@
     "statusIdle": "LLM Not Loaded",
     "searchPlaceholder": "Search models...",
     "noModelsFound": "No models found",
+    "sourceLocal": "Local",
     "languages": {
       "en-US": "American English",
       "zh-CN": "Chinese (China)",

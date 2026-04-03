@@ -113,6 +113,7 @@
     "statusIdle": "LLM no cargado",
     "searchPlaceholder": "Buscar modelos...",
     "noModelsFound": "No se encontraron modelos",
+    "sourceLocal": "Local",
     "languages": {
       "en-US": "Inglés estadounidense",
       "zh-CN": "Chino (China)",

@@ -457,7 +457,7 @@ function ProviderCard({
                 : updateProvider(provider.id, { apiKey: e.target.value })
             }
             onBlur={() => cloud && flushCloudKey()}
-            placeholder='Enter API key'
+            placeholder={t('settings.providerApiKey')}
             className={`${inputClass} pr-9`}
           />
           <button
@@ -929,7 +929,7 @@ export default function SettingsPage() {
                         </span>
                         <span className='text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium uppercase'>
                           {provider.type === 'openai-compatible'
-                            ? 'Custom'
+                            ? t('settings.providerTypeOpenaiCompatible')
                             : provider.type}
                         </span>
                       </div>

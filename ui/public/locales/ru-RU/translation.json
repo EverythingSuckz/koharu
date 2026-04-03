@@ -113,6 +113,7 @@
     "statusIdle": "LLM не загружена",
     "searchPlaceholder": "Поиск моделей...",
     "noModelsFound": "Модели не найдены",
+    "sourceLocal": "Локальная",
     "languages": {
       "en-US": "Американский английский",
       "zh-CN": "Китайский (Китай)",
