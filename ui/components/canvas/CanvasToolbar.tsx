@@ -32,7 +32,6 @@ import { useLlmUiStore } from '@/lib/stores/llmUiStore'
 import {
   useLlmModelsQuery,
   useLlmReadyQuery,
-  getProviderForModel,
   type LlmModelEntry,
 } from '@/lib/query/hooks'
 import { useDocumentMutations, useLlmMutations } from '@/lib/query/mutations'
@@ -253,20 +252,6 @@ function LlmStatusPopover() {
     () => llmModels.find((m) => m.id === llmSelectedModel),
     [llmModels, llmSelectedModel],
   )
-  const isApiModel =
-    selectedModelInfo?.source !== 'local' &&
-    selectedModelInfo?.source !== undefined
-
-  // Check if cloud API key is missing for the selected model
-  const selectedProvider = useMemo(() => {
-    if (!selectedModelInfo) return undefined
-    return getProviderForModel(selectedModelInfo.id, selectedModelInfo.source)
-  }, [selectedModelInfo])
-  const apiKeyMissing =
-    isApiModel &&
-    selectedModelInfo?.source !== 'openai-compatible' &&
-    !selectedProvider
-
   const activeLanguages = useMemo(
     () => selectedModelInfo?.languages ?? [],
     [selectedModelInfo],
@@ -410,14 +395,6 @@ function LlmStatusPopover() {
               />
             </PopoverContent>
           </Popover>
-
-          {apiKeyMissing && (
-            <p className='text-xs text-amber-500'>
-              {t('llm.apiKeyMissing', {
-                provider: getProviderDisplayName(selectedModelInfo!.source),
-              })}
-            </p>
-          )}
 
           {llmReady &&
             selectedModelInfo &&
